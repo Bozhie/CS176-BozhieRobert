@@ -13,6 +13,7 @@
 
 import sys # DO NOT EDIT THIS
 from shared import *
+import numpy
 
 ALPHABET = [TERMINATOR] + BASES
 
@@ -29,6 +30,7 @@ def get_suffix_array(s):
     >>> get_suffix_array('GATAGACA$')
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
+
     pass
 
 def get_bwt(s, sa):
@@ -129,6 +131,7 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
+
         pass
 
     def align(self, read_sequence):
