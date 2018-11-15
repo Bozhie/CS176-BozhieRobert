@@ -15,6 +15,7 @@ import sys # DO NOT EDIT THIS
 from shared import *
 import numpy as np
 
+
 ALPHABET = [TERMINATOR] + BASES
 
 def get_suffix_array(s):
@@ -24,12 +25,94 @@ def get_suffix_array(s):
 
     Input:
         s: a string of the alphabet ['A', 'C', 'G', 'T'] already terminated by a unique delimiter '$'
-    
+
     Output: list of indices representing the suffix array
 
     >>> get_suffix_array('GATAGACA$')
     [8, 7, 5, 3, 1, 6, 4, 0, 2]
     """
+
+    def getChar(ix, pos):
+        """ Returns the character in the 'pos' position of ix suffix. """
+        return s[ix + pos]
+
+    def sortSuffixes(i, j, pos):
+        """ sorts the suffixes in range i:j in A by the letter in position pos. """
+
+        if (i >= j):
+            return
+
+        # tmp_A will be the temporary sorted portion of A for the values from i:j
+        tmp_A = np.empty((j - i + 1), dtype=np.int)
+        # counter array holding counts for each character in lexicographic order ($ count, A count, ...)
+        counter = np.zeros(5, dtype=np.int)
+
+        # C[i] holds the position of the start of a block of each character in A
+        C = np.zeros(5, dtype=np.int)
+        # tmp_C[i] holds the position of the start of a block of each character in tmp_A
+        tmp_C = np.zeros(5, dtype=np.int)
+
+
+        for k in range(i, j + 1):
+            if (getChar(A[k], pos) == "$"):
+                counter[0] += 1
+            elif (getChar(A[k], pos) == 'A'):
+                counter[1] += 1
+            elif (getChar(A[k], pos) == 'C'):
+                counter[2] += 1
+            elif (getChar(A[k], pos) == 'G'):
+                counter[3] += 1
+            elif (getChar(A[k], pos) == 'T'):
+                counter[4] += 1
+
+
+        # Fill out C and tmp_C using the counts
+        for k in range(0,len(counter)):
+            if k == 0:
+                C[k] = i
+                tmp_C[k] = 0
+            else:
+                C[k] = C[k-1] + counter[k-1]
+                tmp_C[k] = tmp_C[k-1] + counter[k-1]
+
+
+        for k in range(i, j+1):
+            if (getChar(A[k], pos) == '$'):
+                tmp_A[tmp_C[0]] = A[k]
+                tmp_C[0] += 1
+            elif (getChar(A[k], pos) == 'A'):
+                tmp_A[tmp_C[1]] = A[k]
+                tmp_C[1] += 1
+            elif (getChar(A[k], pos) == 'C'):
+                tmp_A[tmp_C[2]] = A[k]
+                tmp_C[2] += 1
+            elif (getChar(A[k], pos) == 'G'):
+                tmp_A[tmp_C[3]] = A[k]
+                tmp_C[3] += 1
+            elif (getChar(A[k], pos) == 'T'):
+                tmp_A[tmp_C[4]] = A[k]
+                tmp_C[4] += 1
+
+        A[i:j + 1] = tmp_A[0:len(tmp_A) + 1]
+
+        new_pos = pos + 1
+        for k in range(0, len(C)):
+            if (counter[k] > 1):
+                if k == len(C)-1:
+                    sortSuffixes(C[k], j, new_pos)
+                else:
+                    sortSuffixes(C[k], C[k+1] - 1, new_pos)
+
+
+    A = np.empty(len(s), dtype=np.int)
+
+    for i in range(len(s)):
+        A[i] = i
+
+    sortSuffixes(0, len(s) - 1, 0)
+
+    return A
+
     pass
 
 def get_bwt(s, sa):
@@ -71,6 +154,8 @@ def get_F(L):
         F[i] = 'T'
         i += 1
     return F
+
+    pass
         
 def get_M(F):
     
@@ -85,7 +170,8 @@ def get_M(F):
                 hi = mid
         return lo + 1
     return {'$' : 0, 'A' : 1, 'C' : bin_search('C'), 'G' : bin_search('G'), 'T': bin_search('T')}
-
+    
+    pass
 
 def get_occ(L):
     """
@@ -95,23 +181,26 @@ def get_occ(L):
     """
     occ = {'$' : [], 'A' : [], 'C' : [], 'G' : [], 'T' : []}
     a,g,t,c,d = 0,0,0,0,0
-    for c in L:
-        if c == '$':
-            d = 1
-        elif c == 'A':
-            d = 1
-        elif c == 'C':
-            d = 1
-        elif c == 'G':
-            d = 1
-        else c == 'T':
-            d = 1
-        occ['A'].append(occ[len(occ['A']) - 1] + a)
-        occ['C'].append(occ[len(occ['C']) - 1] + c)
-        occ['G'].append(occ[len(occ['G']) - 1] + g)
-        occ['T'].append(occ[len(occ['t']) - 1] + t)
-        occ['$'].append(occ[len(occ['$']) - 1] + d)
+    
+    for s in L:
+        if s == '$':
+            d += 1
+        elif s == 'A':
+            a += 1
+        elif s == 'C':
+            c += 1
+        elif s == 'G':
+            g += 1
+        else:
+            t += 1
+        occ['A'].append(a)
+        occ['C'].append(c)
+        occ['G'].append(g)
+        occ['T'].append(t)
+        occ['$'].append(d)
     return occ
+
+    pass
 
 def exact_suffix_matches(p, M, occ):
     """
@@ -162,23 +251,31 @@ def exact_suffix_matches(p, M, occ):
     sp = M[p[pos]]
     if p[pos] == '$':
         ep = M['A'] - 1
-    elif sp == 'A':
+    elif p[pos] == 'A':
         ep = M['C'] - 1
-    elif sp == 'C':
+    elif p[pos] == 'C':
         ep = M['G'] - 1
-    elif sp == 'G':
+    elif p[pos] == 'G':
         ep = M['T'] - 1
-    else 
+    else: 
         ep = len(occ['A']) - 1
-        
+    
+    
+    
     while sp <= ep and pos > 0:
+        print(sp, ep)
+        prev_sp, prev_ep, = sp, ep
         pos -= 1
         c = p[pos]
         sp = M[c] + occ[c][sp - 1]
         ep = M[c] + occ[c][ep] - 1
+        if sp > ep:
+            return ((prev_sp, prev_ep), len(p) - pos - 1)
     
-    return ((sp, ep), len(p) - pos))
+    
+    return ((sp, ep), len(p))
         
+    pass
 
 MIN_INTRON_SIZE = 20
 MAX_INTRON_SIZE = 10000
@@ -196,6 +293,7 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
+
         pass
 
     def align(self, read_sequence):
