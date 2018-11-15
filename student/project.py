@@ -13,6 +13,7 @@
 
 import sys # DO NOT EDIT THIS
 from shared import *
+import numpy as np
 
 ALPHABET = [TERMINATOR] + BASES
 
@@ -32,32 +33,59 @@ def get_suffix_array(s):
     pass
 
 def get_bwt(s, sa):
-    """
-    Input:
-        s: a string terminated by a unique delimiter '$'
-        sa: the suffix array of s
-
-    Output:
-        L: BWT of s as a string
-    """
-    pass
+    
+    L = ""
+    for i in range(len(sa)):
+        L += s[sa[i] - 1 % len(s)]
+    return L
 
 def get_F(L):
-    """
-    Input: L = get_bwt(s)
-
-    Output: F, first column in Pi_sorted
-    """
-    pass
-
+    
+    a_count, c_count, g_count, t_count, dollar = 0,0,0,0,0
+    for s in L:
+        if s == 'A':
+            a_count += 1
+        elif s == 'C':
+            c_count += 1
+        elif s == 'G':
+            g_count += 1
+        elif s == 'T':
+            t_count += 1
+        else:
+            dollar += 1
+    F = np.empty(len(L), str)
+    i = 0
+    for j in range(dollar):
+        F[i] = '$'
+        i += 1
+    for j in range(a_count):
+        F[i] = 'A'
+        i += 1
+    for j in range(c_count):
+        F[i] = 'C'
+        i += 1
+    for j in range(g_count):
+        F[i] = 'G'
+        i += 1
+    for j in range(t_count):
+        F[i] = 'T'
+        i += 1
+    return F
+        
 def get_M(F):
-    """
-    Returns the helper data structure M (using the notation from class). M is a dictionary that maps character
-    strings to start indices. i.e. M[c] is the first occurrence of "c" in F.
+    
+    def bin_search(c):
+        lo = 0
+        hi = len(F)
+        while lo < hi - 1:
+            mid = (lo + hi)//2 
+            if (F[mid] < c):
+                lo = mid
+            else:
+                hi = mid
+        return lo + 1
+    return {'$' : 0, 'A' : 1, 'C' : bin_search('C'), 'G' : bin_search('G'), 'T': bin_search('T')}
 
-    If a character "c" does not exist in F, you may set M[c] = -1
-    """
-    pass
 
 def get_occ(L):
     """
@@ -65,7 +93,25 @@ def get_occ(L):
     string character to a list of integers. If c is a string character and i is an integer, then OCC[c][i] gives
     the number of occurrences of character "c" in the bwt string up to and including index i
     """
-    pass
+    occ = {'$' : [], 'A' : [], 'C' : [], 'G' : [], 'T' : []}
+    a,g,t,c,d = 0,0,0,0,0
+    for c in L:
+        if c == '$':
+            d = 1
+        elif c == 'A':
+            d = 1
+        elif c == 'C':
+            d = 1
+        elif c == 'G':
+            d = 1
+        else c == 'T':
+            d = 1
+        occ['A'].append(occ[len(occ['A']) - 1] + a)
+        occ['C'].append(occ[len(occ['C']) - 1] + c)
+        occ['G'].append(occ[len(occ['G']) - 1] + g)
+        occ['T'].append(occ[len(occ['t']) - 1] + t)
+        occ['$'].append(occ[len(occ['$']) - 1] + d)
+    return occ
 
 def exact_suffix_matches(p, M, occ):
     """
@@ -111,7 +157,28 @@ def exact_suffix_matches(p, M, occ):
     >>> exact_suffix_matches('AA', M, occ)
     ((1, 11), 1)
     """
-    pass
+    
+    pos = len(p) - 1
+    sp = M[p[pos]]
+    if p[pos] == '$':
+        ep = M['A'] - 1
+    elif sp == 'A':
+        ep = M['C'] - 1
+    elif sp == 'C':
+        ep = M['G'] - 1
+    elif sp == 'G':
+        ep = M['T'] - 1
+    else 
+        ep = len(occ['A']) - 1
+        
+    while sp <= ep and pos > 0:
+        pos -= 1
+        c = p[pos]
+        sp = M[c] + occ[c][sp - 1]
+        ep = M[c] + occ[c][ep] - 1
+    
+    return ((sp, ep), len(p) - pos))
+        
 
 MIN_INTRON_SIZE = 20
 MAX_INTRON_SIZE = 10000
