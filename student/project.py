@@ -293,6 +293,21 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
+        
+                
+        transcriptome = ""
+        
+        for gene in known_genes:
+            for isoform in gene.isoforms:
+                iso = ""
+                for exon in isoform.exons: 
+                    iso = iso + genome_sequence[exon.start:exon.end]
+                transcriptome = transcriptome + iso + "$$$$$$"
+
+                
+        trans_SA = get_suffix_array(transcriptome)
+        
+        genome_SA = get_suffix_array(genome_sequence)
 
         pass
 
