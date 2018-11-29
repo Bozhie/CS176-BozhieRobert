@@ -13,107 +13,54 @@
 
 import sys # DO NOT EDIT THIS
 from shared import *
+
+from project import *
+from math import ceil, log2
 import numpy as np
+import time
 
 
 ALPHABET = [TERMINATOR] + BASES
 
+
+def to_int_keys_best(l):
+    """
+    l: iterable of keys
+    returns: a list with integer keys
+    """
+    seen = set()
+    ls = []
+    for e in l:
+        if not e in seen:
+            ls.append(e)
+            seen.add(e)
+    ls.sort()
+    index = {v: i for i, v in enumerate(ls)}
+    return [index[v] for v in l]
+
 def get_suffix_array(s):
-    """
-    Naive implementation of suffix array generation (0-indexed). You do not have to implement the
-    KS Algorithm. Make this code fast enough so you have enough time in Aligner.__init__ (see bottom).
 
-    Input:
-        s: a string of the alphabet ['A', 'C', 'G', 'T'] already terminated by a unique delimiter '$'
+    if not s:
+        return []
+    s += chr(0)
 
-    Output: list of indices representing the suffix array
+    equivalence = {t: i for i, t in enumerate(sorted(set(s)))}
+    cls = np.array([equivalence[t] for t in s])
+    ns = 2**np.arange(ceil(log2(len(s))))
 
-    >>> get_suffix_array('GATAGACA$')
-    [8, 7, 5, 3, 1, 6, 4, 0, 2]
-    """
+    for n in ns[:-1]:
+        cls1 = np.roll(cls, -n)
+        inds = np.lexsort((cls1, cls))
+        result = np.logical_or(np.diff(cls[inds]), 
+                               np.diff(cls1[inds]))
 
-    def getChar(ix, pos):
-        """ Returns the character in the 'pos' position of ix suffix. """
-        return s[ix + pos]
+        cls[inds[0]] = 0
+        cls[inds[1:]] = np.cumsum(result)
 
-    def sortSuffixes(i, j, pos):
-        """ sorts the suffixes in range i:j in A by the letter in position pos. """
+    cls1 = np.roll(cls, ns[-1])
 
-        if (i >= j):
-            return
+    return np.lexsort((cls1, cls))[1:]
 
-        # tmp_A will be the temporary sorted portion of A for the values from i:j
-        tmp_A = np.empty((j - i + 1), dtype=np.int)
-        # counter array holding counts for each character in lexicographic order ($ count, A count, ...)
-        counter = np.zeros(5, dtype=np.int)
-
-        # C[i] holds the position of the start of a block of each character in A
-        C = np.zeros(5, dtype=np.int)
-        # tmp_C[i] holds the position of the start of a block of each character in tmp_A
-        tmp_C = np.zeros(5, dtype=np.int)
-
-
-        for k in range(i, j + 1):
-            if (getChar(A[k], pos) == "$"):
-                counter[0] += 1
-            elif (getChar(A[k], pos) == 'A'):
-                counter[1] += 1
-            elif (getChar(A[k], pos) == 'C'):
-                counter[2] += 1
-            elif (getChar(A[k], pos) == 'G'):
-                counter[3] += 1
-            elif (getChar(A[k], pos) == 'T'):
-                counter[4] += 1
-
-
-        # Fill out C and tmp_C using the counts
-        for k in range(0,len(counter)):
-            if k == 0:
-                C[k] = i
-                tmp_C[k] = 0
-            else:
-                C[k] = C[k-1] + counter[k-1]
-                tmp_C[k] = tmp_C[k-1] + counter[k-1]
-
-
-        for k in range(i, j+1):
-            if (getChar(A[k], pos) == '$'):
-                tmp_A[tmp_C[0]] = A[k]
-                tmp_C[0] += 1
-            elif (getChar(A[k], pos) == 'A'):
-                tmp_A[tmp_C[1]] = A[k]
-                tmp_C[1] += 1
-            elif (getChar(A[k], pos) == 'C'):
-                tmp_A[tmp_C[2]] = A[k]
-                tmp_C[2] += 1
-            elif (getChar(A[k], pos) == 'G'):
-                tmp_A[tmp_C[3]] = A[k]
-                tmp_C[3] += 1
-            elif (getChar(A[k], pos) == 'T'):
-                tmp_A[tmp_C[4]] = A[k]
-                tmp_C[4] += 1
-
-        A[i:j + 1] = tmp_A[0:len(tmp_A) + 1]
-
-        new_pos = pos + 1
-        for k in range(0, len(C)):
-            if (counter[k] > 1):
-                if k == len(C)-1:
-                    sortSuffixes(C[k], j, new_pos)
-                else:
-                    sortSuffixes(C[k], C[k+1] - 1, new_pos)
-
-
-    A = np.empty(len(s), dtype=np.int)
-
-    for i in range(len(s)):
-        A[i] = i
-
-    sortSuffixes(0, len(s) - 1, 0)
-
-    return A
-
-    pass
 
 def get_bwt(s, sa):
     
@@ -263,12 +210,13 @@ def exact_suffix_matches(p, M, occ):
     
     
     while sp <= ep and pos > 0:
-        print(sp, ep)
         prev_sp, prev_ep, = sp, ep
         pos -= 1
         c = p[pos]
         sp = M[c] + occ[c][sp - 1]
         ep = M[c] + occ[c][ep] - 1
+        if (ep >= len(occ)) :
+            ep -= 1
         if sp > ep:
             return ((prev_sp, prev_ep), len(p) - pos - 1)
     
@@ -293,23 +241,510 @@ class Aligner:
                     so don't stress if you are close. Server is 1.25 times faster than the i7 CPU on my computer
 
         """
-        
-                
+
         transcriptome = ""
-        
+        genome_loc = {}
+        trans_ix = 0
+        genome_loc_array = []
+
         for gene in known_genes:
             for isoform in gene.isoforms:
                 iso = ""
-                for exon in isoform.exons: 
-                    iso = iso + genome_sequence[exon.start:exon.end]
-                transcriptome = transcriptome + iso + "$$$$$$"
 
-                
-        trans_SA = get_suffix_array(transcriptome)
-        
-        genome_SA = get_suffix_array(genome_sequence)
+                for exon in isoform.exons:
+                    iso = iso + genome_sequence[exon.start:exon.end]
+                    exon_len = len(genome_sequence[exon.start:exon.end])
+                    keeper = [exon.start, len(genome_sequence[exon.start:exon.end])]
+                    genome_loc[trans_ix] = tuple(keeper)
+                    genome_loc_array[trans_ix:trans_ix+exon_len] = list(range(exon.start,exon.end))
+                    trans_ix = trans_ix + len(iso)
+
+                transcriptome = transcriptome + iso + "$$$$$$"
+                genome_loc_array[trans_ix:trans_ix+6] = [-1]*6
+                trans_ix = trans_ix + 6
+
+        self.genome_loc = genome_loc
+        self.trans_SA = get_suffix_array(transcriptome)
+        self.transcriptome = transcriptome
+        self.genome_loc_array = genome_loc_array
+        self.genome_sequence = genome_sequence
+        self.genome_SA = []
+        self.genome_SA = get_suffix_array(self.genome_sequence)
+        self.L = get_bwt(self.genome_sequence, self.genome_SA)
+        self.F = get_F(self.L)
+        self.M = get_M(self.F)
+        self.occ = get_occ(self.L)
+        self.intron_lb = 20
+        self.intron_ub = 10000
 
         pass
+
+
+    def index_translator(self, aligned_piece):
+    
+        def trans_to_genome(i):
+
+            ix = self.genome_loc
+            offset = 0
+
+            while i >= 0:
+                if i in ix:
+                    return ix.get(i)[0] + offset
+                else:
+                    i = i - 1
+                    offset = offset + 1
+
+        read_start = aligned_piece[0]
+        genome_start = trans_to_genome(aligned_piece[1])
+        read_len = aligned_piece[2]
+
+        return (read_start, genome_start, read_len)
+
+    def find_sp(self, lo, hi, c, pos, SA, s):
+
+        if (lo == hi):
+            if (s[SA[lo] + pos] == c):
+                return lo
+            else:
+                return None
+
+        while lo < hi - 1:
+
+            mid = (lo + hi) // 2
+            if (s[SA[mid] + pos] < c):
+                lo = mid
+            else:
+                hi = mid
+
+        if (lo == hi - 1):
+            if (s[SA[lo] + pos] == c):
+                return lo
+            elif (s[SA[hi] + pos] == c):
+                return hi
+            else:
+                return None
+
+        return lo + 1
+
+    def find_ep(self, lo, hi, c, pos, SA, s):
+
+        if (lo == hi):
+            if (s[SA[lo] + pos] == c):
+                return lo
+            else:
+                return None
+
+        while lo < hi - 1:
+
+            mid = (lo + hi) // 2
+            if (s[SA[mid] + pos] > c):
+                hi = mid
+            else:
+                lo = mid
+
+        if (lo == hi - 1):
+            if (s[SA[lo] + pos] == c) and (s[SA[hi] + pos] != c):
+                return lo
+            elif (s[SA[hi] + pos] == c):
+                return hi
+            else:
+                return None
+
+        return hi - 1
+
+    def binary_search(self, seq, SA, s):
+
+        sp = 0
+        ep = len(s) - 1
+        pos = 0
+
+        while sp <= ep and pos < len(seq):
+
+            prev_sp = sp
+            prev_ep = ep
+            c = seq[pos]
+
+            if (sp == ep):
+                if (s[SA[sp] + pos] == c):
+                    pos = pos + 1
+                    continue
+                else:
+                    return (sp, ep), pos
+
+            sp = self.find_sp(prev_sp, prev_ep, c, pos, SA, s)
+            ep = self.find_ep(prev_sp, prev_ep, c, pos, SA, s)
+
+            if (sp == None) or (ep == None):
+                return (prev_sp, prev_ep), pos
+            pos = pos + 1
+
+        if (sp > ep):
+            return (prev_sp, prev_ep), pos
+        elif (sp == None) or (ep == None):
+            return (prev_sp, prev_ep), pos-1
+        else:
+            return (sp, ep), pos
+        
+    def extend_alignment_to_end(self, partial_alignment, read):
+        T = self.genome_sequence
+        intron_lb = self.intron_lb
+        intron_ub = self.intron_ub
+        A = self.genome_SA
+        potential_alignment = partial_alignment[0]
+        mismatches = partial_alignment[1]
+        hit = potential_alignment[len(potential_alignment) - 1]
+        new_len = hit[2]
+        while hit[0] + new_len < len(read):
+            if read[hit[0] + new_len] != T[hit[1] + new_len]:
+                mismatches += 1   
+            if mismatches > 6:
+                return None
+            new_len += 1
+        new_hit = (hit[0], hit[1], new_len)
+        return (potential_alignment[:len(potential_alignment) - 1] + [new_hit], mismatches)
+    
+    
+    def extend_alignment(self, partial_alignment, last_hit, read):
+        T = self.genome_sequence
+        intron_lb = self.intron_lb
+        intron_ub = self.intron_ub
+        A = self.genome_SA
+        potential_alignment = partial_alignment[0]
+        mismatches = partial_alignment[1]
+        first_hit = potential_alignment[len(potential_alignment) - 1]
+        dist = last_hit[0] - first_hit[0] - first_hit[2]
+        intron_size = last_hit[1] - first_hit[1] - first_hit[2] - dist
+        best_cost = 0
+        best_i = 0
+        for i in range(1, dist + 1):
+            if read[last_hit[0] - i] != T[last_hit[1] - i]:
+                best_cost += 1
+        M = np.zeros(dist + 1, dtype=int)
+        M[0] = best_cost
+        for i in range(1, dist + 1):
+            M[i] = M[i-1]
+            #print(read[first_hit[0] + first_hit[2] - 1 + i] + " " + T[first_hit[1] + first_hit[2] - 1 + i])
+            #print(read[first_hit[0] + first_hit[2] - 1 + i] + " " + T[first_hit[1] + first_hit[2] - 1 + intron_size + i])
+            #print("-----------------------")
+            if read[first_hit[0] + first_hit[2] - 1 + i] != T[first_hit[1] + first_hit[2] - 1 + i]:
+                M[i] += 1
+            if read[first_hit[0] + first_hit[2] -1 + i] != T[first_hit[1] + first_hit[2] - 1 + intron_size + i]:
+                M[i] -= 1
+            if M[i] < best_cost:
+                best_cost = M[i]
+                best_i = i
+
+        if mismatches + best_cost > 6:
+            return None
+        new_left = (first_hit[0], first_hit[1], first_hit[2] + best_i)
+        dl = dist - best_i
+        new_right = (last_hit[0] - dl, last_hit[1] - dl, last_hit[2] + dl)
+        return (potential_alignment[:len(potential_alignment) - 1] + [new_left, new_right], mismatches + best_cost)
+    
+
+    def extend_right(self, partial_alignment, i, hits, read):
+        T = self.genome_sequence
+        intron_lb = self.intron_lb
+        intron_ub = self.intron_ub
+        A = self.genome_SA
+        potential_alignment = partial_alignment[0]
+        mismatches = partial_alignment[1]
+        valid_aligns = []
+        a = self.extend_alignment_to_end(partial_alignment, read)
+        if a:
+            valid_aligns.append(a)
+        if len(potential_alignment) < 3:
+
+            for j in range(i + 1, len(hits)):
+                hit = hits[i]
+                next_hit = hits[j]
+                genomic_dist = next_hit[1] - hit[1] - hit[2]
+                if genomic_dist > intron_ub:
+                    break
+                dist = next_hit[0] - hit[0] - hit[2]
+                if dist < 0:
+                    continue
+                intron_length = genomic_dist - dist
+                if intron_length >= intron_lb and intron_length <= intron_ub:
+                    pa = self.extend_alignment(partial_alignment, next_hit, read)
+
+                    if pa:
+                        valid_aligns.extend(self.extend_right(pa, j, hits, read))
+        return valid_aligns
+
+
+    def align_genome(reads, T, intron_lb, intron_ub, A):
+        #take longest hits, try to extend to hits left and right
+        #merge with nearby hits
+        #once merged as much as possible, calculate score
+        #Take highest scoring match
+        L = get_bwt(T, A)
+        F = get_F(L)
+        M = get_M(F)
+        occ = get_occ(L)
+        alignments = []
+
+        def extend_alignment_to_end(partial_alignment, read):
+            potential_alignment = partial_alignment[0]
+            mismatches = partial_alignment[1]
+            hit = potential_alignment[len(potential_alignment) - 1]
+            new_len = hit[2]
+            while hit[0] + new_len < len(read):
+                if read[hit[0] + new_len] != T[hit[1] + new_len]:
+                    mismatches += 1   
+                if mismatches > 6:
+                    return None
+                new_len += 1
+            new_hit = (hit[0], hit[1], new_len)
+            return (potential_alignment[:len(potential_alignment) - 1] + [new_hit], mismatches)
+
+
+
+        def extend_alignment(partial_alignment, last_hit, read):
+            potential_alignment = partial_alignment[0]
+            mismatches = partial_alignment[1]
+            first_hit = potential_alignment[len(potential_alignment) - 1]
+            dist = last_hit[0] - first_hit[0] - first_hit[2]
+            intron_size = last_hit[1] - first_hit[1] - first_hit[2] - dist
+            best_cost = 0
+            best_i = 0
+            for i in range(1, dist + 1):
+                if read[last_hit[0] - i] != T[last_hit[1] - i]:
+                    best_cost += 1
+            M = np.zeros(dist + 1, dtype=int)
+            M[0] = best_cost
+            for i in range(1, dist + 1):
+                M[i] = M[i-1]
+                if read[first_hit[0] + first_hit[2] - 1 + i] != T[first_hit[1] + first_hit[2] - 1 + i]:
+                    M[i] += 1
+                if read[first_hit[0] + first_hit[2] -1 + i] != T[first_hit[1] + first_hit[2] - 1 + intron_size + i]:
+                    M[i] -= 1
+                if M[i] < best_cost:
+                    best_cost = M[i]
+                    best_i = i
+            if mismatches + best_cost > 6:
+                return None
+            new_left = (first_hit[0], first_hit[1], first_hit[2] + best_i)
+            dl = dist - best_i
+            new_right = (last_hit[0] - dl, last_hit[1] - dl, last_hit[2] + dl)
+            return (potential_alignment[:len(potential_alignment) - 1] + [new_left, new_right], mismatches + best_cost)
+
+
+        def extend_right(partial_alignment, i, hits, read):
+            potential_alignment = partial_alignment[0]
+            mismatches = partial_alignment[1]
+            valid_aligns = []
+            a = extend_alignment_to_end(partial_alignment, read)
+            if a:
+                valid_aligns.append(a)
+            if len(potential_alignment) < 3:
+
+                for j in range(i + 1, len(hits)):
+                    hit = hits[i]
+                    next_hit = hits[j]
+                    genomic_dist = next_hit[1] - hit[1] - hit[2]
+                    if genomic_dist > intron_ub:
+                        break
+                    dist = next_hit[0] - hit[0] - hit[2]
+                    if dist < 0:
+                        continue
+                    intron_length = genomic_dist - dist
+                    if intron_length >= intron_lb and intron_length <= intron_ub:
+                        pa = extend_alignment(partial_alignment, next_hit, read)
+                        if pa:
+                            valid_aligns.extend(extend_right(pa, j, hits, read))
+            return valid_aligns
+
+        for r in reads:
+            rest = r
+            complete_aligns = []
+            hits = []
+            while len(rest) > 0:
+                result = exact_suffix_matches(rest, M, occ)
+                #print("string:", rest)
+                #print("max suffix match:", rest[len(rest) - result[1]:])
+                #print(result)
+                #print("--------------")
+                start = result[0][0]
+                end = result[0][1]
+                if end - start <= 5:
+                    for i in range(start, end + 1):
+                        hit = (len(rest) - result[1], A[i], result[1])
+                        #(position in read, position in genome, length)
+                        if len(r) - hit[0] <= len(T) - hit[1]:
+                            hits.append(hit)
+                rest = rest[:len(rest) - result[1]]
+
+            hits.sort(key=lambda x: x[1])
+            # print(hits)
+            for i in range(len(hits)):
+                start = hits[i][0]
+                genomic_start = hits[i][1]
+                mismatches = 0
+                len_so_far = hits[i][2]
+                #extend left
+                while start > 0:
+                    start -= 1
+                    genomic_start -= 1
+                    len_so_far += 1
+                    if r[start] != T[genomic_start]:
+                        mismatches += 1
+                    if mismatches > 6:
+                        break
+                if mismatches > 6:
+                    i += 1
+                    continue
+                partial_alignment = ([(0, genomic_start, hits[i][2] + hits[i][0] - start)], mismatches)
+                v = extend_right(partial_alignment, i, hits, r)
+                complete_aligns.extend(v)
+
+            best = ()
+            min_mismatches = 7
+            for x in complete_aligns:
+                if x[1] < min_mismatches:
+                    best = x
+            alignments.append(best[0])
+
+        return alignments
+
+
+    def index_translator(self, aligned_pieces):
+
+        read_start = aligned_pieces[0]
+        ref_start = aligned_pieces[1]
+        len_match = aligned_pieces[2]
+        ix = self.genome_loc_array
+        alignments = []
+
+        k = 1
+        genomic_start = ix[ref_start]
+
+        for i in range(ref_start + 1, ref_start + len_match):
+            pos = ix[i]
+            if ix[i] != ix[i-1] + 1:
+                alignments.append((read_start, genomic_start, k))
+                read_start += k
+                genomic_start = pos
+                k = 0
+            k += 1
+
+        alignments.append((read_start, genomic_start, k))
+
+        return alignments
+    
+    def align_genome_single(self, r):
+
+        T = self.genome_sequence
+        intron_lb = self.intron_lb
+        intron_ub = self.intron_ub
+        A = self.genome_SA
+        rest = r
+        complete_aligns = []
+        hits = []
+        while len(rest) > 0:
+            result = exact_suffix_matches(rest, self.M, self.occ)
+            #print("string:", rest)
+            #print("max suffix match:", rest[len(rest) - result[1]:])
+            #print(result)
+            #print("--------------")
+            start = result[0][0]
+            end = result[0][1]
+            if end - start <= 8:
+                for i in range(start, end + 1):
+                    hit = (len(rest) - result[1], A[i], result[1])
+                    #(position in read, position in genome, length)
+                    if len(r) - hit[0] <= len(T) - hit[1]:
+                        hits.append(hit)
+            rest = rest[:len(rest) - result[1]]
+
+        hits.sort(key=lambda x: x[1])
+
+        for i in range(len(hits)):
+            start = hits[i][0]
+            genomic_start = hits[i][1]
+            mismatches = 0
+            len_so_far = hits[i][2]
+            #extend left
+            while start > 0:
+                start -= 1
+                genomic_start -= 1
+                len_so_far += 1
+                if r[start] != T[genomic_start]:
+                    mismatches += 1
+                if mismatches > 6:
+                    break
+            if mismatches > 6:
+                i += 1
+                continue
+            partial_alignment = ([(0, genomic_start, hits[i][2] + hits[i][0] - start)], mismatches)
+            v = self.extend_right(partial_alignment, i, hits, r)
+            complete_aligns.extend(v)
+
+        best = ([], 7)
+        min_mismatches = 7
+        for x in complete_aligns:
+            if x[1] < min_mismatches:
+                best = x
+        return best[0]
+
+    
+    def simple_sa_align_single(self, r):
+        A = self.trans_SA
+        T = self.transcriptome
+        rest = r
+        potential_aligns = []
+        hits = []
+        while len(rest) > 0:
+            result = self.binary_search(rest, A, T)
+            """print("string:", rest)
+            print("max prefix match:", rest[:result[1]])
+            print(result)
+            print("--------------")"""
+            start = result[0][0]
+            end = result[0][1]
+            if end - start <= 5:
+                for i in range(start, end + 1):
+                    hit = (len(r) - len(rest), A[i], result[1])
+                    #(position in read, position in genome, length)
+                    hits.append(hit)
+            rest = rest[result[1]:]
+        lowest_mismatch = 7
+        best = ()
+        found_best = False
+        for h in hits:
+            mismatches = 0
+            start = h[0]
+            genomic_start = h[1]
+            end = h[0] + h[2] - 1
+            while start > 0:
+                start -= 1
+                genomic_start -= 1
+                if r[start] != T[genomic_start]:
+                    mismatches += 1
+                if mismatches > 6:
+                    break
+            if mismatches > 6:
+                continue
+            while end < len(r) - 1:
+                end += 1
+                if r[end] != T[genomic_start + end]:
+                    mismatches += 1
+                if mismatches > 6:
+                    break
+            if mismatches > 6:
+                continue
+
+            if mismatches == 0:
+                return(start, genomic_start, len(r))
+                found_best = True
+                break
+            if mismatches < lowest_mismatch:
+                best = (start, genomic_start, len(r))
+                lowest_mismatch = mismatches
+        if not found_best and best:
+            return best
+        return []
+
 
     def align(self, read_sequence):
         """
@@ -327,5 +762,15 @@ class Aligner:
         If no good matches are found: return the best match you can find or return []
 
         Time limit: 0.5 seconds per read on average on the provided data.
+        
         """
+
+        a1 = self.simple_sa_align_single(read_sequence)
+        if a1:
+            return self.index_translator(a1)
+        
+        a2 = self.align_genome_single(read_sequence)
+        
+        return a2
+    
         pass
